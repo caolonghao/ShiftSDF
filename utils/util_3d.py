@@ -69,6 +69,7 @@ def save_mesh_as_gif(mesh_renderer, mesh, nrow=3, fps=450, out_name='1.gif'):
     nimgs = len(rot_comb)
     nrots = len(rot_comb[0])
     H, W, C = rot_comb[0][0].shape
+    # print("H, W, C: ", H, W, C)
     rot_comb_img = []
     for i in range(nrots):
         img_grid_i = torch.zeros(nimgs, H, W, C)
@@ -78,18 +79,22 @@ def save_mesh_as_gif(mesh_renderer, mesh, nrow=3, fps=450, out_name='1.gif'):
         img_grid_i = img_grid_i.permute(0, 3, 1, 2)
         img_grid_i = vutils.make_grid(img_grid_i, nrow=nrow)
         img_grid_i = img_grid_i.permute(1, 2, 0).numpy().astype(np.uint8)
-            
+        
+        # print("img_grid_i.shape: ", img_grid_i.shape)
+        # imageio.imwrite(f"./debug_output/image{i}.png", img_grid_i)    
         rot_comb_img.append(img_grid_i)
     
 
     duration = nrots / fps
 
     # with imageio.get_writer(out_name, mode='I', duration=.08) as writer:
-    with imageio.get_writer(out_name, mode='I', duration=duration) as writer:
+    # with imageio.get_writer(out_name, mode='I', duration=duration) as writer:
         
-        # combine them according to nrow
-        for rot in rot_comb_img:
-            writer.append_data(rot)
+    #     # combine them according to nrow
+    #     for rot in rot_comb_img:
+    #         writer.append_data(rot)
+    
+    imageio.mimwrite(out_name, rot_comb_img, duration=duration, loop=0)
 ####################################################################################
 
 
@@ -288,7 +293,7 @@ def render_mesh(renderer, mesh, color=None, norm=True):
                     verts_rgb_i[:, i] = color[i]
             verts_rgb_list.append(verts_rgb_i)
 
-        texture = pytorch3d.renderer.Textures(verts_rgb=verts_rgb_list)
+        texture = pytorch3d.structures.Textures(verts_rgb=verts_rgb_list)
         mesh.textures = texture
 
     images = renderer(mesh)
@@ -405,7 +410,7 @@ def rotate_mesh_360(mesh_renderer, mesh, n_frames=36):
         cur_mesh = rotate_mesh(cur_mesh, angle=angle, device=device)
         img = render_mesh(mesh_renderer, cur_mesh, norm=False) # b c h w
         img = img.permute(0, 2, 3, 1) # b h w c
-        img = img.detach().cpu().numpy()
+        img = img.detach().cpu().numpy()[..., :3]
         img = (img * 255).astype(np.uint8)
         for j in range(B):
             ret[j].append(img[j])

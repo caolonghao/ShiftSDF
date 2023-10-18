@@ -28,8 +28,8 @@ class BaseOpt(object):
         # important args
         self.isTrain = False
         self.gpu_ids = [gpu_ids]
-        # self.device = f'cuda:{gpu_ids}'
-        self.device = 'cuda'
+        self.device = f'cuda:{gpu_ids}'
+        # self.device = 'cuda'
         self.debug = '0'
 
         # default args
