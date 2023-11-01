@@ -81,8 +81,8 @@ def downsample_voxel(voxel, threshold, output_size, resample=True):
         voxel, threshold)
     x_mesh, y_mesh, z_mesh = mesh_grid(
         (x_min, x_max, y_min, y_max, z_min, z_max), output_size)
-    x_mesh = np.reshape(np.transpose(x_mesh, (1, 0, 2)), (-1))
-    y_mesh = np.reshape(np.transpose(y_mesh, (1, 0, 2)), (-1))
+    x_mesh = np.reshape(np.transpose(x_mesh, (1, 0, 2)), (-1)).contiguous()
+    y_mesh = np.reshape(np.transpose(y_mesh, (1, 0, 2)), (-1)).contiguous()
     z_mesh = np.reshape(z_mesh, (-1))
 
     fill_value = 0

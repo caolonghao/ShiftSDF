@@ -68,7 +68,7 @@ class BaseOptions():
 
         # multi-gpu stuff
         self.parser.add_argument("--backend", type=str, default="gloo", help="which backend to use")
-        self.parser.add_argument("--local_rank", type=int, default=0, help="local rank for distributed training")
+        self.parser.add_argument("--local-rank", type=int, default=0, help="local rank for distributed training")
 
         self.initialized = True
 
@@ -95,6 +95,7 @@ class BaseOptions():
         self.opt.distributed = n_gpu > 1
 
         if self.opt.distributed:
+            print("local_rank: ", self.opt.local_rank)
             torch.cuda.set_device(self.opt.local_rank)
             torch.distributed.init_process_group(backend=self.opt.backend, init_method="env://")
             synchronize()

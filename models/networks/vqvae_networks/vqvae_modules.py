@@ -161,7 +161,7 @@ class AttnBlock(nn.Module):
         # compute attention
         b, c, d, h, w = q.shape
         q = q.reshape(b, c, d*h*w)
-        q = q.permute(0,2,1)   # b,dhw,c
+        q = q.permute(0,2,1).contiguous()   # b,dhw,c
         k = k.reshape(b, c, d*h*w) # b,c,dhw
         w_ = torch.bmm(q,k)     # b,dhw,dhw    w[b,i,j]=sum_c q[b,i,c]k[b,c,j]
         w_ = w_ * (int(c)**(-0.5))
@@ -169,7 +169,7 @@ class AttnBlock(nn.Module):
 
         # attend to values
         v = v.reshape(b,c,d*h*w)
-        w_ = w_.permute(0,2,1)   # b,hw,hw (first hw of k, second of q)
+        w_ = w_.permute(0,2,1).contiguous()   # b,hw,hw (first hw of k, second of q)
         h_ = torch.bmm(v,w_)     # b, c,hw (hw of q) h_[b,c,j] = sum_i v[b,c,i] w_[b,i,j]
         h_ = h_.reshape(b, c, d, h, w)
 
