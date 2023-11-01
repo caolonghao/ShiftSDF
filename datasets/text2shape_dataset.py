@@ -40,7 +40,7 @@ class Text2ShapeDataset(BaseDataset):
 
             self.data = [row for row in reader]
 
-        with open(f'{dataroot}/ShapeNet/info.json') as f:
+        with open(f'dataset_info_files/info-shapenet.json') as f:
             self.info = json.load(f)
 
         self.cat_to_id = self.info['cats']
@@ -62,9 +62,10 @@ class Text2ShapeDataset(BaseDataset):
             if cat_i.lower() not in valid_cats:
                 continue
             
-            sdf_path = f'{dataroot}/ShapeNet/SDF_v1_{res}/{synset}/{model_id}/ori_sample_grid.h5'
+            sdf_path = f'{dataroot}/ShapeNet/SDF_v1/resolution_{res}/{synset}/{model_id}/ori_sample_grid.h5'
 
             if not os.path.exists(sdf_path):
+                # print("sdf_path: ", sdf_path)
                 continue
                 # {'Chair': 26523, 'Table': 33765} vs {'Chair': 26471, 'Table': 33517}
                 # not sure why there are some missing files

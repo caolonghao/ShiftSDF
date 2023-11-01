@@ -83,15 +83,15 @@ def train_main_worker(opt, model, train_dl, test_dl, test_dl_for_eval, visualize
             if iter_ip1 % opt.save_latest_freq == 0:
                 cprint('saving the latest model (current_iter %d)' % (iter_i), 'blue')
                 latest_name = f'steps-latest'
-                model.save(latest_name, iter_ip1)
+                model.save(latest_name, iter_ip1, save_opt=True)
 
             # save every 3000 steps (batches)
             if iter_ip1 % opt.save_steps_freq == 0:
                 cprint('saving the model at iters %d' % iter_ip1, 'blue')
                 latest_name = f'steps-latest'
-                model.save(latest_name, iter_ip1)
+                model.save(latest_name, iter_ip1, save_opt=True)
                 cur_name = f'steps-{iter_ip1}'
-                model.save(cur_name, iter_ip1)
+                model.save(cur_name, iter_ip1, save_opt=True)
 
             # eval every 3000 steps
             if iter_ip1 % opt.save_steps_freq == 0:
@@ -121,7 +121,8 @@ if __name__ == "__main__":
     device = opt.device
     rank = opt.rank
 
-    # CUDA_VISIBLE_DEVICES = int(os.environ["LOCAL_RANK"]) 
+    # CUDA_VISIBLE_DEVICES = int(os.environ["LOCAL_RANK"])
+    # print("cuda visible devices: ", CUDA_VISIBLE_DEVICES)
     # import pdb; pdb.set_trace()
 
     # get current time, print at terminal. easier to track exp

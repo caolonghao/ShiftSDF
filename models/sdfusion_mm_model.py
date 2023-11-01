@@ -206,7 +206,7 @@ class SDFusionMultiModal2ShapeModel(BaseModel):
         )
         
         logvar_init = 0.
-        self.logvar = torch.full(fill_value=logvar_init, size=(self.num_timesteps,))
+        self.logvar = torch.full(fill_value=logvar_init, size=(self.num_timesteps,), device=opt.device)
         # for cls-free guidance
         self.uc_scale = uc_scale
 
@@ -362,6 +362,7 @@ class SDFusionMultiModal2ShapeModel(BaseModel):
         loss_simple = self.get_loss(model_output, target, mean=False).mean([1, 2, 3, 4])
         loss_dict.update({f'loss_simple': loss_simple.mean()})
 
+        print(self.device, "t: ",t, "self.logvar.deivce:", self.logvar.device, "self.logvar.shape:", self.logvar.shape)
         logvar_t = self.logvar[t].to(self.device)
         loss = loss_simple / torch.exp(logvar_t) + logvar_t
         if self.learn_logvar:

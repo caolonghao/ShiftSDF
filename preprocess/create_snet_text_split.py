@@ -15,6 +15,7 @@ opt = parser.parse_args()
 dataroot = opt.dataroot
 csv_file = f'{dataroot}/ShapeNet/text2shape/captions.tablechair.csv'
 
+print(csv_file)
 assert os.path.exists(csv_file)
 
 seed = 777

@@ -180,7 +180,7 @@ class SDFusionText2ShapeModel(BaseModel):
         )
         
         logvar_init = 0.
-        self.logvar = torch.full(fill_value=logvar_init, size=(self.num_timesteps,))
+        self.logvar = torch.full(fill_value=logvar_init, size=(self.num_timesteps,), device=opt.device)
         # for cls-free guidance
         self.uc_scale = uc_scale
 
@@ -246,6 +246,8 @@ class SDFusionText2ShapeModel(BaseModel):
         self.text = input['text']
         B = self.x.shape[0]
         self.uc_text = B * [""]
+        
+        print("Batch size: ", B)
 
         if max_sample is not None:
             self.x = self.x[:max_sample]
