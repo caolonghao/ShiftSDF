@@ -43,7 +43,8 @@ class BaseOptions():
         ############## START: model related options ################
         self.parser.add_argument(
                             '--model', type=str, default='sdfusion',
-                            choices=['vqvae', 'sdfusion', 'sdfusion-img2shape', 'sdfusion-txt2shape','sdfusion-mm2shape'],
+                            choices=['vqvae', 'sdfusion', 'sdfusion-img2shape', 'sdfusion-txt2shape',
+                                     'sdfusion-mm2shape', 'sdfusion-shift-txt2shape'],
                             help='chooses which model to use.'
                         )
         self.parser.add_argument('--ckpt', type=str, default=None, help='ckpt to load.')
@@ -60,6 +61,9 @@ class BaseOptions():
         self.parser.add_argument('--vq_dset', type=str, default=None, help='dataset vqvae originally trained on')
         self.parser.add_argument('--vq_cat', type=str, default=None, help='dataset category vqvae originally trained on')
         self.parser.add_argument('--vq_ckpt', type=str, default=None, help='vqvae ckpt to load.')
+
+        # shift stuff
+        self.parser.add_argument('--shift_type', type=str, default='quadratic_shift', help='shift type for setting k_t in paper')
         ############## END: model related options ################
 
         # misc

@@ -19,6 +19,8 @@ logs/
 quant_logs*/
 qual_logs*/
 saved_ckpt*/
+logs_*/
+nohup.out
 
 # data
 data

@@ -25,7 +25,11 @@ def create_model(opt):
     elif opt.model == 'sdfusion-mm2shape':
         from models.sdfusion_mm_model import SDFusionMultiModal2ShapeModel
         model = SDFusionMultiModal2ShapeModel()
-        
+    
+    elif opt.model == 'sdfusion-shift-txt2shape':
+        from models.sdfusion_shift_txt2shape_model import SDFusionShiftText2ShapeModel
+        model = SDFusionShiftText2ShapeModel()
+    
     else:
         raise ValueError("Model [%s] not recognized." % opt.model)
 

@@ -37,7 +37,7 @@ def tensor2im(image_tensor, imtype=np.uint8):
     image_tensor = vutils.make_grid( image_tensor, nrow=4 )
 
     image_numpy = image_tensor.cpu().float().numpy()
-    image_numpy = ( np.transpose( image_numpy, (1, 2, 0) ).contiguous() + 1) / 2.0 * 255.
+    image_numpy = ( np.transpose( image_numpy, (1, 2, 0) ) + 1) / 2.0 * 255.
     return image_numpy.astype(imtype)
 
 def tensor_to_pil(tensor):
