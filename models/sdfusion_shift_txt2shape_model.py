@@ -467,7 +467,7 @@ class SDFusionShiftText2ShapeModel(BaseModel):
             t = torch.full((shape[0],), i, device=self.device, dtype=torch.long)
             u = self.shift_predictor(none_x, t, cond).to(self.device)
             tmp = extract_into_tensor(self.shift, t, shape) * u / extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, shape)
-            predicted_noise = self.apply_model(img, t, cond) - tmp
+            predicted_noise = self.apply_model(img, t, none_cond) - tmp
             img = self.shift_p_sample(img, u, t, predicted_noise)
         
         return img
