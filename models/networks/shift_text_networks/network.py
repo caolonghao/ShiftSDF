@@ -28,4 +28,20 @@ class CLIPTextEncoder(nn.Module):
         text_features = self.model.encode_text(tokenized_text).to(self.device)
         
         return text_features
+
+class MPNetTextEncoder(nn.Module):
+    def __init__(self, 
+                 model_name='all-mpnet-base-v2',
+                 device='cuda' if torch.cuda.is_available() else 'cpu',
+                 ):
+        super().__init__()
+        from sentence_transformers import SentenceTransformer
         
+        self.model = SentenceTransformer(model_name).to(device)
+        self.device = device
+        
+    def forward(self, x):
+        # print(self.model.device)
+        text_features = self.model.encode(x)
+        
+        return torch.tensor(text_features, device=self.device)

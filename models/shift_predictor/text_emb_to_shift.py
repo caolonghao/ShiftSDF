@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from .openai_model_3d import UNet3DModel
 
 class Swish(nn.Module):
     def __init__(self):
@@ -52,3 +53,60 @@ class TextShiftPredictor(nn.Module):
         B = x.shape[0]
         x = x.reshape(B, -1).contiguous()
         return self.predictor(x).reshape(-1, self.image_channel, self.image_size, self.image_size, self.image_size)
+    
+class UNetShiftPredictor(nn.Module):
+    def __init__(self, params, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        
+        self.model = ShiftUNet(params)
+        
+    def forward(self, x, t, cond, return_ids=False):
+        if isinstance(cond, dict):
+            # hybrid case, cond is exptected to be a dict
+            pass
+        else:
+            if not isinstance(cond, list):
+                cond = [cond]
+            key = 'c_concat' if self.model.conditioning_key == 'concat' else 'c_crossattn'
+            cond = {key: cond}
+
+        # eps
+        out = self.model(x, t, cond)
+        if isinstance(out, tuple) and not return_ids:
+            return out[0]
+        else:
+            return out
+        
+class ShiftUNet(nn.Module):
+    def __init__(self, unet_params, vq_conf=None, conditioning_key=None):
+        """ init method """
+        super().__init__()
+
+        self.diffusion_net = UNet3DModel(**unet_params)
+        self.conditioning_key = conditioning_key # default for lsun_bedrooms
+
+
+    def forward(self, x, t, c_concat: list = None, c_crossattn: list = None):
+        # x: should be latent code. shape: (bs X z_dim X d X h X w)
+        # print("c_concat: ", c_concat, "c_crossattn: ", c_crossattn)
+        # print("self.conditioning_key: ", self.conditioning_key)
+        if self.conditioning_key is None:
+            out = self.diffusion_net(x, t)
+        elif self.conditioning_key == 'concat':
+            xc = torch.cat([x] + c_concat, dim=1)
+            out = self.diffusion_net(xc, t)
+        elif self.conditioning_key == 'crossattn':
+            cc = torch.cat(c_crossattn, 1)
+            out = self.diffusion_net(x, t, context=cc)
+        elif self.conditioning_key == 'hybrid':
+            xc = torch.cat([x] + c_concat, dim=1)
+            cc = torch.cat(c_crossattn, 1)
+            out = self.diffusion_net(xc, t, context=cc)
+            # import pdb; pdb.set_trace()
+        elif self.conditioning_key == 'adm':
+            cc = c_crossattn[0]
+            out = self.diffusion_net(x, t, y=cc)
+        else:
+            raise NotImplementedError()
+
+        return out

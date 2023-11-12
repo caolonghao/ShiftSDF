@@ -27,8 +27,8 @@ from models.networks.vqvae_networks.network import VQVAE
 from models.networks.diffusion_networks.network import DiffusionUNet
 from models.networks.bert_networks.network import BERTTextEncoder
 from models.model_utils import load_vqvae
-from models.shift_predictor import TextShiftPredictor
-from models.networks.open_clip_networks.network import CLIPTextEncoder
+from models.shift_predictor import TextShiftPredictor, UNetShiftPredictor
+from models.networks.shift_text_networks.network import CLIPTextEncoder, MPNetTextEncoder
 
 # ldm util
 from models.networks.diffusion_networks.ldm_diffusion_util import (
@@ -97,12 +97,12 @@ class SDFusionShiftText2ShapeModel(BaseModel):
             param.requires_grad = True
         
         # Freeze Open-CLIP Text Encoder
-        self.shift_cond_model = CLIPTextEncoder(device=self.device)
-        for param in self.cond_model.parameters():
-            param.requires_grad = False
+        # self.shift_cond_model = MPNetTextEncoder()
+        # for param in self.cond_model.parameters():
+        #     param.requires_grad = True
         
         # init shifted_settings
-        self.shift_predictor = TextShiftPredictor(config=shift_predictor_params)
+        self.shift_predictor = UNetShiftPredictor(shift_predictor_params)
         self.shift_predictor.to(self.device)
         
         ######## END: Define Networks ########
@@ -382,19 +382,19 @@ class SDFusionShiftText2ShapeModel(BaseModel):
     # check: ddpm.py, line 871 forward
     # check: p_losses
     # check: q_sample, apply_model
-    def p_losses(self, x_start, cond, shift_cond, t, noise=None):
+    def p_losses(self, x_start, cond, t, noise=None):
         shape = x_start.shape
         noise = default(noise, lambda: torch.randn_like(x_start))
         
-        # print("cond.shape:", cond.shape)
-        u = self.shift_predictor(shift_cond)
+        none_x = torch.randn_like(x_start, device=self.device)
+        u = self.shift_predictor(none_x, t, cond)
         # shift_q_sample to get shifted x_noisy
         x_noisy = self.shift_q_sample(x_start=x_start, t=t, u=u, noise=noise)
         
         # predict noise (eps) or x0
         none_cond = None
         tmp = extract_into_tensor(self.shift, t, shape) * u / extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, shape)
-        predicted_noise = self.apply_model(x_noisy, t, cond) - tmp
+        predicted_noise = self.apply_model(x_noisy, t, none_cond) - tmp
 
         loss_dict = {}
 
@@ -432,7 +432,7 @@ class SDFusionShiftText2ShapeModel(BaseModel):
 
         # print("self.text: ", self.text)
         c_text = self.cond_model(self.text) # B, 77, 1280
-        shitf_c_text = self.shift_cond_model(self.text) # B, 512
+        # shitf_c_text = self.shift_cond_model(self.text) # B, 512
         
         # 1. encode to latent
         #    encoder, quant_conv, but do not quantize
@@ -442,17 +442,20 @@ class SDFusionShiftText2ShapeModel(BaseModel):
 
         # 2. do diffusion's forward
         t = torch.randint(0, self.num_timesteps, (z.shape[0],), device=self.device).long()
-        z_noisy, target, loss, loss_dict = self.p_losses(z, c_text, shitf_c_text, t)
+        z_noisy, target, loss, loss_dict = self.p_losses(z, c_text, t)
 
         self.loss_df = loss
         self.loss_dict = loss_dict
 
 
     # shift sampling process (without DDIM)
-    def shift_sample(self, x_T, cond, shift_cond):
+    def shift_sample(self, x_T, cond):
         shape = x_T.shape
         none_cond = None
-        u = self.shift_predictor(shift_cond).to(self.device)
+        none_x = torch.randn_like(x_T, device=self.device)
+        
+        t = torch.full((shape[0],), self.num_timesteps-1, device=self.device, dtype=torch.long)
+        u = self.shift_predictor(none_x, t, cond).to(self.device)
         if self.shift_type == "prior_shift" or self.shift_type == "early":
             img = x_T + u
         elif self.shift_type == "data_normalization" or self.shift_type == "quadratic_shift":
@@ -462,6 +465,7 @@ class SDFusionShiftText2ShapeModel(BaseModel):
         for i in tqdm(reversed(range(0, self.num_timesteps)), desc='sampling loop time step', total=self.num_timesteps):
             # print("image.shape: ", img.shape)
             t = torch.full((shape[0],), i, device=self.device, dtype=torch.long)
+            u = self.shift_predictor(none_x, t, cond).to(self.device)
             tmp = extract_into_tensor(self.shift, t, shape) * u / extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, shape)
             predicted_noise = self.apply_model(img, t, cond) - tmp
             img = self.shift_p_sample(img, u, t, predicted_noise)
@@ -499,12 +503,12 @@ class SDFusionShiftText2ShapeModel(BaseModel):
             self.set_input(data)
         
         c_text = self.cond_model(self.text)
-        shift_c_text = self.shift_cond_model(self.text)
+        # shift_c_text = self.shift_cond_model(self.text)
         
         B = c_text.shape[0]
         x_T = torch.randn((B, self.z_shape[0], self.z_shape[1], self.z_shape[2], self.z_shape[3]), device=self.device)
         # print("x_T.shape: ", x_T.shape)
-        samples = self.shift_sample(x_T, c_text, shift_c_text)
+        samples = self.shift_sample(x_T, c_text)
         
         # decode z
         self.gen_df = self.vqvae_module.decode_no_quant(samples)
