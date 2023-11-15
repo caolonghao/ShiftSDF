@@ -48,7 +48,7 @@ from utils.util_3d import init_mesh_renderer, render_sdf
 
 class SDFusionShiftText2ShapeModel(BaseModel):
     def name(self):
-        return 'SDFusion-Text2Shape-Model'
+        return 'SDFusion-ShiftText2Shape-Model'
 
     def initialize(self, opt):
         BaseModel.initialize(self, opt)
