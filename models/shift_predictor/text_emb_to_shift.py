@@ -22,7 +22,6 @@ class TextShiftPredictor(nn.Module):
         self.input_dim = config["input_dim"]
         self.image_channel = config["image_channel"] # the channel of latent space
         self.image_size = config["image_size"] # the dimention of latent space
-        self.cond_model = config["cond_model"]
         
         # self.predictor = nn.Linear(self.input_dim, self.image_channel * self.image_size * self.image_size * self.image_size)
         

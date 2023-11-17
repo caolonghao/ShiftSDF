@@ -75,7 +75,7 @@ class SDFusionShiftText2ShapeModel(BaseModel):
         unet_params = df_conf.unet.params
         shift_predictor_params = df_conf.shift_predictor.params
         
-        self.df = DiffusionUNet(unet_params, vq_conf=vq_conf)
+        self.df = DiffusionUNet(unet_params, vq_conf=vq_conf, conditioning_key=df_model_params.conditioning_key)
         self.df.to(self.device)
 
         self.shift_type = opt.shift_type
@@ -392,6 +392,10 @@ class SDFusionShiftText2ShapeModel(BaseModel):
         x_noisy = self.shift_q_sample(x_start=x_start, t=t, u=u, noise=noise)
         
         # predict noise (eps) or x0
+        
+        # import pdb
+        # pdb.set_trace()
+        
         none_cond = None
         tmp = extract_into_tensor(self.shift, t, shape) * u / extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, shape)
         predicted_noise = self.apply_model(x_noisy, t, cond) - tmp
@@ -432,7 +436,7 @@ class SDFusionShiftText2ShapeModel(BaseModel):
 
         # print("self.text: ", self.text)
         c_text = self.cond_model(self.text) # B, 77, 1280
-        shitf_c_text = self.shift_cond_model(self.text) # B, 512
+        shift_c_text = self.shift_cond_model(self.text) # B, 512
         
         # 1. encode to latent
         #    encoder, quant_conv, but do not quantize
@@ -442,7 +446,7 @@ class SDFusionShiftText2ShapeModel(BaseModel):
 
         # 2. do diffusion's forward
         t = torch.randint(0, self.num_timesteps, (z.shape[0],), device=self.device).long()
-        z_noisy, target, loss, loss_dict = self.p_losses(z, c_text, shitf_c_text, t)
+        z_noisy, target, loss, loss_dict = self.p_losses(z, c_text, shift_c_text, t)
 
         self.loss_df = loss
         self.loss_dict = loss_dict

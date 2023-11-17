@@ -4,4 +4,4 @@ dset='shapenet'
 reduce=4
 # category='all'
 category='chair'
-python -u create_sdf.py --dset ${dset} --thread_num 9 --reduce ${reduce} --category ${category}
+python -u create_sdf.py --dset ${dset} --thread_num 64 --reduce ${reduce} --category ${category}
