@@ -99,7 +99,7 @@ class SDFusionShiftText2ShapeModel(BaseModel):
         # Freeze Open-CLIP Text Encoder
         self.shift_cond_model = CLIPTextEncoder(device=self.device)
         for param in self.cond_model.parameters():
-            param.requires_grad = False
+            param.requires_grad = True
         
         # init shifted_settings
         self.shift_predictor = TextShiftPredictor(config=shift_predictor_params)
@@ -108,7 +108,7 @@ class SDFusionShiftText2ShapeModel(BaseModel):
         ######## END: Define Networks ########
 
         # param list
-        trainable_models = [self.df, self.shift_predictor, self.cond_model]
+        trainable_models = [self.df, self.shift_predictor, self.cond_model, self.shift_cond_model]
         trainable_params = []
         for m in trainable_models:
             trainable_params += [p for p in m.parameters() if p.requires_grad == True]
