@@ -10,6 +10,7 @@ cudnn.benchmark = True
 
 from models.base_model import create_model
 from utils.util_3d import render_sdf, render_mesh, sdf_to_mesh, save_mesh_as_gif, rotate_mesh_360
+
 import clip
 import pandas as pd
 import torch
@@ -22,22 +23,23 @@ import nrrd
 from utils.demo_util import SDFusionText2ShapeOpt
 from PIL import Image
 import logging
+from scipy.ndimage import zoom
+from utils.util_3d import voxel_save
 
+def load_test_data(data_folder='./data/ShapeNet/text2shape/', categoty='Chair', sample_num=None, random_seed=618):
+    text_mesh_pair_list = pd.read_csv(os.path.join(data_folder, 'captions.tablechair_test.csv'))
+    # text_table_list = text_mesh_pair_list[text_mesh_pair_list['category'] == 'Table']
+    # text_chair_list = text_mesh_pair_list[text_mesh_pair_list['category'] == 'Chair']
+    # text_table_list = text_table_list.reset_index(drop=True)
+    # text_chair_list = text_chair_list.reset_index(drop=True)
 
-def load_test_data(data_folder='./data/ShapeNet/text2shape/', sample_num=1000, random_seed=618):
-    text_mesh_pair_list = pd.read_csv(os.path.join(data_folder, 'captions.tablechair.csv'))
-    text_table_list = text_mesh_pair_list[text_mesh_pair_list['category'] == 'Table']
-    text_chair_list = text_mesh_pair_list[text_mesh_pair_list['category'] == 'Chair']
-    text_table_list = text_table_list.reset_index(drop=True)
-    text_chair_list = text_chair_list.reset_index(drop=True)
-
-    table_id_and_text = text_table_list[['modelId', 'description']]
-    chair_id_and_text = text_chair_list[['modelId', 'description']]
+    test_data_list = text_mesh_pair_list[text_mesh_pair_list['category'] == categoty]
+    test_data_list = test_data_list.reset_index(drop=True)
+    test_id_with_text = test_data_list[['modelId', 'description']]
+    if sample_num is not None:
+        test_id_with_text = test_id_with_text.sample(n=sample_num, random_state=random_seed)
     
-    sample_table_pairs = table_id_and_text.sample(n=sample_num, random_state=random_seed)
-    sample_chair_pairs = chair_id_and_text.sample(n=sample_num, random_state=random_seed)
-    
-    return sample_table_pairs, sample_chair_pairs
+    return test_id_with_text
 
 def remove_invalid_tokens(text):
     invalid_tokens = ['\\', '/', ':', '*', '?', '"', '<', '>', '|']
@@ -50,9 +52,11 @@ def load_gt_voxel(folder_path, model_id):
     gt_voxels, header = nrrd.read(path)
     r, g, b, a = gt_voxels[0, :, :, :], gt_voxels[1, :, :, :], gt_voxels[2, :, :, :], gt_voxels[3, :, :, :]
 
-    target = (a > 0).astype(np.float32)
+    gt_voxel_bin = (a > 0).astype(np.float32)
+    rotated_voxel = np.rot90(gt_voxel_bin, k=1, axes=(0, 2))
+    rotated_voxel = np.rot90(rotated_voxel, k=2, axes=(0, 1))
     # print(np.count_nonzero(target))
-    return target
+    return rotated_voxel
 
 def IoU(voxels_i, voxels_j):
     intersection = np.sum(voxels_i * voxels_j)
@@ -75,17 +79,25 @@ def calc_total_mutual_difference(voxels_gen):
     return total_mutual_difference  
 
 def sdf_to_voxels(sdf):
-    # print("sdf.shape: ", sdf.shape)
-    downsampled_sdf = F.interpolate(sdf, size=32, mode='trilinear', align_corners=True)
-    downsampled_sdf = downsampled_sdf.cpu().detach().numpy()
+    voxel = torch.where(torch.abs(sdf) < 0.02, torch.ones_like(sdf), torch.zeros_like(sdf))
+    # voxel = F.interpolate(voxel, size=32, mode='trilinear', align_corners=True)
+    voxel = voxel.cpu().detach().numpy()
+
+    
+    # downsampled_sdf = sdf.cpu().detach().numpy()
     # print("downsampled_sdf.shape: ", downsampled_sdf.shape)
     voxels_list = []
-    for i in range(downsampled_sdf.shape[0]):
-        # verts_i, faces_i = mcubes.marching_cubes(downsampled_sdf[i, 0], 0.00)
-        voxels_i = np.zeros((32, 32, 32))
-        voxels_i[downsampled_sdf[i, 0] < 0.1] = 1
-        # print("generated nonzero: ", np.sum(voxels_i))
-        voxels_list.append(voxels_i)
+    for i in range(voxel.shape[0]):
+        voxel_i = voxel[i, 0, :, :, :]
+        voxel_i = zoom(voxel_i, 0.5)
+        
+        voxel_i[voxel_i >= 0.25] = 1
+        voxel_i[voxel_i < 0.25] = 0
+        
+        rotated_voxel = np.rot90(voxel_i, k=2, axes=(2, 0))
+        rotated_voxel = np.rot90(rotated_voxel, k=1, axes=(1, 2))
+        
+        voxels_list.append(rotated_voxel)
     
     return voxels_list
 
@@ -110,11 +122,16 @@ def calc_CLIP_score(renderer, clip_model, preprocess, text, mesh_gen, device, n_
 
 if __name__ == '__main__':
     
-    logging.basicConfig(filename='test.log', level=logging.INFO)
+    from datetime import datetime
+    test_time = datetime.now().strftime('%Y-%m-%dT%H-%M')
+    
+    sample_num = 1000
+    
+    logging.basicConfig(filename=f'./logs/test_{sample_num}sample_{test_time}.log', level=logging.INFO)
     
     
     #--------------Load Model---------------#
-    gpu_ids = 1
+    gpu_ids = 0
     os.environ["CUDA_VISIBLE_DEVICES"] = f"{gpu_ids}"
     
     device = 'cuda:1'
@@ -143,12 +160,12 @@ if __name__ == '__main__':
     ddim_eta = 0.
     uc_scale = 3.
     
-    sample_num = 1000
-    sample_table_pairs, sample_chair_pairs = load_test_data(sample_num=sample_num)
+    
+    test_id_with_text = load_test_data(sample_num=sample_num)
     
     total_IoU, total_ClipScore, total_TMD = 0, 0, 0
     for i in range(sample_num):
-        sample_obj_id, sample_text = sample_chair_pairs.iloc[i]
+        sample_obj_id, sample_text = test_id_with_text.iloc[i]
         sample_text = remove_invalid_tokens(sample_text)
         
         sdf_gen = SDFusion.txt2shape(input_txt=sample_text, ngen=ngen, ddim_steps=ddim_steps, ddim_eta=ddim_eta, uc_scale=uc_scale)
@@ -157,11 +174,18 @@ if __name__ == '__main__':
         
         
         # vis as gif
-        gen_name = f'{out_dir}/txt2shape-{sample_text}.gif'
-        save_mesh_as_gif(SDFusion.renderer, mesh_gen, nrow=3, out_name=gen_name)
+        # gen_name = f'{out_dir}/txt2shape-{sample_text}.gif'
+        # save_mesh_as_gif(SDFusion.renderer, mesh_gen, nrow=3, out_name=gen_name)
         
         folder_path = './data/ShapeNet/text2shape/nrrd_256_filter_div_32'
         gt_voxels = load_gt_voxel(folder_path, sample_obj_id)
+        
+        # voxel_save(gt_voxels, 'gt_voxel', out_file='gt_voxel.png', transpose=False)
+        # voxel_save(voxels_gen[0], 'gen_voxel', out_file='gen_voxel.png', transpose=False)
+        
+        # import pdb
+        # pdb.set_trace()
+        
         
         IoU_score = IoU(gt_voxels, voxels_gen[0])
         TMD_score = calc_total_mutual_difference(voxels_gen)

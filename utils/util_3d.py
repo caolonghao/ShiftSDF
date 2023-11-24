@@ -9,6 +9,9 @@ import einops
 from einops import rearrange, repeat
 # from skimage import measure
 from termcolor import cprint
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
 
 import torch
 import torchvision.utils as vutils
@@ -239,6 +242,58 @@ def sdf_to_mesh(sdf, level=0.02, color=None, render_all=False):
         p3d_mesh = None
 
     return p3d_mesh
+
+# convert pytorch3d mesh object to trimesh object
+def p3dmesh_to_trimesh(p2dmesh):
+    verts = p2dmesh.verts_list()
+    faces = p2dmesh.faces_list()
+    verts_rgb = p2dmesh.textures.verts_rgb_list()
+    verts_rgb = [v.detach().cpu().numpy() for v in verts_rgb]
+    verts = [v.detach().cpu().numpy() for v in verts]
+    faces = [f.detach().cpu().numpy() for f in faces]
+    mesh_list = []
+    for i in range(len(verts)):
+        mesh = trimesh.Trimesh(vertices=verts[i], faces=faces[i], vertex_colors=verts_rgb[i])
+        mesh_list.append(mesh)
+    return mesh_list
+
+
+def voxel_save(voxels, text_name, out_file=None, transpose=True, show=False):
+
+    # Use numpy
+    voxels = np.asarray(voxels)
+    # Create plot
+    #fig = plt.figure()
+    fig = plt.figure(figsize=(40,20))
+    
+    ax = fig.add_subplot(111, projection=Axes3D.name)
+    if transpose == True:
+        voxels = voxels.transpose(2, 0, 1)
+    #else:
+        #voxels = voxels.transpose(2, 0, 1)
+    
+
+    ax.voxels(voxels, edgecolor='k', facecolors='coral', linewidth=0.5)
+    ax.set_xlabel('Z')
+    ax.set_ylabel('X')
+    ax.set_zlabel('Y')
+    # Hide grid lines
+    plt.grid(False)
+    plt.axis('off')
+    
+    if text_name != None:
+        plt.title(text_name, {'fontsize':30}, y=0.15)
+    #plt.text(15, -0.01, "Correlation Graph between Citation & Favorite Count")
+
+    ax.view_init(elev=30, azim=45)
+
+    if out_file is not None:
+        plt.axis('off')
+        plt.savefig(out_file)
+    if show:
+        plt.show()
+    plt.close(fig)
+    
 
 def voxel_to_mesh(voxel, color=None):
     vox_mesh = pytorch3d.ops.cubify(voxel, thresh=0.5)

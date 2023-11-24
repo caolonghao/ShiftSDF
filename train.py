@@ -153,11 +153,14 @@ if __name__ == "__main__":
     if get_rank() == 0:
         expr_dir = '%s/%s' % (opt.logs_dir, opt.name)
         model_f = inspect.getfile(model.__class__)
+        # shift_f = inspect.getfile(model.shift_predictor.__class__)
         dset_f = inspect.getfile(train_ds.__class__)
         cprint(f'[*] saving model and dataset files: {model_f}, {dset_f}', 'blue')
         modelf_out = os.path.join(expr_dir, os.path.basename(model_f))
+        # shiftf_out = os.path.join(expr_dir, os.path.basename(shift_f))
         dsetf_out = os.path.join(expr_dir, os.path.basename(dset_f))
         os.system(f'cp {model_f} {modelf_out}')
+        # os.system(f'cp {shift_f} {shiftf_out}')
         os.system(f'cp {dset_f} {dsetf_out}')
 
         if opt.vq_cfg is not None:
