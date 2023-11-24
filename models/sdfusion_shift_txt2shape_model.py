@@ -387,7 +387,7 @@ class SDFusionShiftText2ShapeModel(BaseModel):
         noise = default(noise, lambda: torch.randn_like(x_start))
         
         none_x = torch.randn_like(x_start, device=self.device)
-        u = self.shift_predictor(none_x, t, cond)
+        u = self.shift_predictor(x_start, t, cond)
         # shift_q_sample to get shifted x_noisy
         x_noisy = self.shift_q_sample(x_start=x_start, t=t, u=u, noise=noise)
         
@@ -465,7 +465,9 @@ class SDFusionShiftText2ShapeModel(BaseModel):
         for i in tqdm(reversed(range(0, self.num_timesteps)), desc='sampling loop time step', total=self.num_timesteps):
             # print("image.shape: ", img.shape)
             t = torch.full((shape[0],), i, device=self.device, dtype=torch.long)
-            u = self.shift_predictor(none_x, t, cond).to(self.device)
+            
+            predicted_x_start = self.apply_model(img, t, cond)
+            u = self.shift_predictor(predicted_x_start, t, cond).to(self.device)
             tmp = extract_into_tensor(self.shift, t, shape) * u / extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, shape)
             predicted_noise = self.apply_model(img, t, cond) - tmp
             img = self.shift_p_sample(img, u, t, predicted_noise)
