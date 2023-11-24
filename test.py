@@ -163,10 +163,15 @@ if __name__ == '__main__':
     
     test_id_with_text = load_test_data(sample_num=sample_num)
     
+    total_sample_num = 0
     total_IoU, total_ClipScore, total_TMD = 0, 0, 0
     for i in range(sample_num):
         sample_obj_id, sample_text = test_id_with_text.iloc[i]
         sample_text = remove_invalid_tokens(sample_text)
+        
+        words = sample_text.split()
+        if len(words) > 77:
+            continue
         
         sdf_gen = SDFusion.txt2shape(input_txt=sample_text, ngen=ngen, ddim_steps=ddim_steps, ddim_eta=ddim_eta, uc_scale=uc_scale)
         mesh_gen = sdf_to_mesh(sdf_gen)
@@ -201,10 +206,11 @@ if __name__ == '__main__':
         
         logging.info("Sample {}: IoU: {:.3f}, ClipScore: {:.3f}, TMD: {:.3f}".format(i, IoU_score, clip_score, TMD_score))
         print("Sample {}: IoU: {:.3f}, ClipScore: {:.3f}, TMD: {:.3f}".format(i, IoU_score, clip_score, TMD_score))
+        total_sample_num += 1
         
-    total_IoU /= sample_num
-    total_ClipScore /= sample_num
-    total_TMD /= sample_num
+    total_IoU /= total_sample_num
+    total_ClipScore /= total_sample_num
+    total_TMD /= total_sample_num
     
     logging.info("IoU: {:.3f}, ClipScore: {:.3f}, TMD: {:.3f}".format(total_IoU, total_ClipScore, total_TMD))
     print("IoU: {:.3f}, ClipScore: {:.3f}, TMD: {:.3f}".format(total_IoU, total_ClipScore, total_TMD))
