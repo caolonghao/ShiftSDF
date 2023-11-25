@@ -183,7 +183,7 @@ class SDFusionShiftText2ShapeModel(BaseModel):
         df_model_params = df_conf.model.params
         
         # ref: ddpm.py, line 44 in __init__()
-        self.parameterization = "eps"
+        self.parameterization = "x0"
         self.learn_logvar = False
         
         self.v_posterior = 0.
@@ -281,12 +281,13 @@ class SDFusionShiftText2ShapeModel(BaseModel):
             lvlb_weights = self.betas ** 2 / (
                         2 * self.posterior_variance * to_torch(alphas).to(self.device) * (1 - self.alphas_cumprod))
         elif self.parameterization == "x0":
-            lvlb_weights = 0.5 * np.sqrt(torch.Tensor(alphas_cumprod)) / (2. * 1 - torch.Tensor(alphas_cumprod))
+            lvlb_weights = 0.5 * torch.sqrt(torch.Tensor(alphas_cumprod)) / (2. * 1 - torch.Tensor(alphas_cumprod))
         else:
             raise NotImplementedError("mu not supported")
         # TODO how to choose this term
         lvlb_weights[0] = lvlb_weights[1]
         self.lvlb_weights = lvlb_weights
+        self.lvlb_weights = self.lvlb_weights.to(self.device)
         assert not torch.isnan(self.lvlb_weights).all()
         ############################ END: init diffusion params ############################
 
@@ -332,12 +333,12 @@ class SDFusionShiftText2ShapeModel(BaseModel):
             extract_into_tensor(self.shift, t, shape) * u
         )
     
-    def shift_p_sample(self, x_t, u, t, predicted_noise):
-        shape = x_t.shape
-        predicted_mean = \
-            extract_into_tensor(self.noise_posterior_mean_x_t_coef, t, shape) * x_t - \
-            extract_into_tensor(self.noise_posterior_mean_noise_coef, t, shape) * predicted_noise + \
-            extract_into_tensor(self.d, t, shape) * u
+    def shift_p_sample(self, x_start, shift_x_t, t, s_t_minus_one):
+        shape = x_start.shape
+        predicted_mean = extract_into_tensor(self.posterior_mean_coef1, t, shape) * x_start + \
+                            extract_into_tensor(self.posterior_mean_coef2, t, shape) * shift_x_t + \
+                            s_t_minus_one
+        
         log_variance_clipped = extract_into_tensor(self.posterior_log_variance_clipped, t, shape)
         noise = torch.randn(shape, device=self.device)
 
@@ -392,10 +393,10 @@ class SDFusionShiftText2ShapeModel(BaseModel):
         x_noisy = self.shift_q_sample(x_start=x_start, t=t, u=u, noise=noise)
         
         # predict noise (eps) or x0
-        none_cond = None
-        tmp = extract_into_tensor(self.shift, t, shape) * u / extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, shape)
-        predicted_noise = self.apply_model(x_noisy, t, cond) - tmp
-
+        # none_cond = None
+        # tmp = extract_into_tensor(self.shift, t, shape) * u / extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, shape)
+        predicted_result = self.apply_model(x_noisy, t, cond)
+        
         loss_dict = {}
 
         if self.parameterization == "x0":
@@ -406,7 +407,7 @@ class SDFusionShiftText2ShapeModel(BaseModel):
             raise NotImplementedError()
 
         # l2
-        loss_simple = self.get_loss(predicted_noise, target, mean=False).mean([1, 2, 3, 4])
+        loss_simple = self.get_loss(predicted_result, target, mean=False).mean([1, 2, 3, 4])
         loss_dict.update({f'loss_simple': loss_simple.mean()})
 
         logvar_t = self.logvar[t].to(self.device)
@@ -417,7 +418,7 @@ class SDFusionShiftText2ShapeModel(BaseModel):
 
         loss = self.l_simple_weight * loss.mean()
 
-        loss_vlb = self.get_loss(predicted_noise, target, mean=False).mean(dim=(1, 2, 3, 4))
+        loss_vlb = self.get_loss(predicted_result, target, mean=False).mean(dim=(1, 2, 3, 4))
         loss_vlb = (self.lvlb_weights[t] * loss_vlb).mean()
         loss_dict.update({f'loss_vlb': loss_vlb})
         loss += (self.original_elbo_weight * loss_vlb)
@@ -451,26 +452,26 @@ class SDFusionShiftText2ShapeModel(BaseModel):
     # shift sampling process (without DDIM)
     def shift_sample(self, x_T, cond):
         shape = x_T.shape
-        none_cond = None
         none_x = torch.randn_like(x_T, device=self.device)
         
         t = torch.full((shape[0],), self.num_timesteps-1, device=self.device, dtype=torch.long)
-        u = self.shift_predictor(none_x, t, cond).to(self.device)
-        if self.shift_type == "prior_shift" or self.shift_type == "early":
-            img = x_T + u
-        elif self.shift_type == "data_normalization" or self.shift_type == "quadratic_shift":
-            img = x_T
-        else:
-            raise NotImplementedError
+        img = x_T
         for i in tqdm(reversed(range(0, self.num_timesteps)), desc='sampling loop time step', total=self.num_timesteps):
             # print("image.shape: ", img.shape)
             t = torch.full((shape[0],), i, device=self.device, dtype=torch.long)
             
             predicted_x_start = self.apply_model(img, t, cond)
-            u = self.shift_predictor(predicted_x_start, t, cond).to(self.device)
-            tmp = extract_into_tensor(self.shift, t, shape) * u / extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, shape)
-            predicted_noise = self.apply_model(img, t, cond) - tmp
-            img = self.shift_p_sample(img, u, t, predicted_noise)
+            s_t = extract_into_tensor(self.shift, t, shape) * self.shift_predictor(predicted_x_start, t, cond).to(self.device)
+            
+            import pdb
+            pdb.set_trace()
+            if i > 0:
+                s_t_minus_one = extract_into_tensor(self.shift, t-1, shape) * self.shift_predictor(predicted_x_start, t-1, cond).to(self.device)
+            else:
+                s_t_minus_one = torch.zeros_like(img, device=self.device)
+            
+            shift_x_t = img - s_t
+            img = self.shift_p_sample(predicted_x_start, shift_x_t, t, s_t_minus_one)
         
         return img
 
