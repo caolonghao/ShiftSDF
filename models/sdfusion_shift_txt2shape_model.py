@@ -450,9 +450,9 @@ class SDFusionShiftText2ShapeModel(BaseModel):
 
 
     # shift sampling process (without DDIM)
-    def shift_sample(self, x_T, cond):
+    def shift_sample(self, x_T, cond, uc=None, uc_scale=None):
         shape = x_T.shape
-        none_x = torch.randn_like(x_T, device=self.device)
+        
         
         t = torch.full((shape[0],), self.num_timesteps-1, device=self.device, dtype=torch.long)
         img = x_T
@@ -460,11 +460,21 @@ class SDFusionShiftText2ShapeModel(BaseModel):
             # print("image.shape: ", img.shape)
             t = torch.full((shape[0],), i, device=self.device, dtype=torch.long)
             
-            predicted_x_start = self.apply_model(img, t, cond)
+            if uc is None or uc_scale is None:
+                predicted_x_start = self.apply_model(img, t, cond)
+            else:
+                x_in = torch.cat([img] * 2)
+                t_in = torch.cat([t] * 2)
+                c_in = torch.cat([uc, cond])
+                
+                e_t_uncond, e_t = self.apply_model(x_in, t_in, c_in).chunk(2)
+                predicted_x_start = e_t_uncond + uc_scale * (e_t - e_t_uncond)
+            
+            
             s_t = extract_into_tensor(self.shift, t, shape) * self.shift_predictor(predicted_x_start, t, cond).to(self.device)
             
-            import pdb
-            pdb.set_trace()
+            # import pdb
+            # pdb.set_trace()
             if i > 0:
                 s_t_minus_one = extract_into_tensor(self.shift, t-1, shape) * self.shift_predictor(predicted_x_start, t-1, cond).to(self.device)
             else:
@@ -495,7 +505,8 @@ class SDFusionShiftText2ShapeModel(BaseModel):
     
     # shifted inference without DDIM Sample
     @torch.no_grad()
-    def inference(self, data, infer_all=False, max_sample=16):
+    def inference(self, data, ddim_steps=None, ddim_eta=0.,
+                  uc_scale=None, infer_all=False, max_sample=16):
         
         self.switch_eval()
         
@@ -505,13 +516,15 @@ class SDFusionShiftText2ShapeModel(BaseModel):
         else:
             self.set_input(data)
         
+        uc = self.cond_model(self.uc_text)
         c_text = self.cond_model(self.text)
         # shift_c_text = self.shift_cond_model(self.text)
         
         B = c_text.shape[0]
+        shape = self.z_shape
         x_T = torch.randn((B, self.z_shape[0], self.z_shape[1], self.z_shape[2], self.z_shape[3]), device=self.device)
         # print("x_T.shape: ", x_T.shape)
-        samples = self.shift_sample(x_T, c_text)
+        samples = self.shift_sample(x_T, c_text, uc, uc_scale)
         
         # decode z
         self.gen_df = self.vqvae_module.decode_no_quant(samples)
@@ -519,7 +532,7 @@ class SDFusionShiftText2ShapeModel(BaseModel):
         self.switch_train()
         
     @torch.no_grad()
-    def shift_txt2shape(self, input_txt, ngen=6):
+    def shift_txt2shape(self, input_txt, uc_scale=None, ngen=6):
         
         self.switch_eval()
         
@@ -530,9 +543,10 @@ class SDFusionShiftText2ShapeModel(BaseModel):
         
         self.set_input(data)
         
+        uc = self.cond_model(self.uc_text)
         c_text = self.cond_model(self.text)
         x_T = torch.randn_like(self.x)
-        samples = self.shift_sample(x_T, c_text)
+        samples = self.shift_sample(x_T, c_text, uc, uc_scale)
         
         # decode z
         self.gen_df = self.vqvae_module.decode_no_quant(samples)
