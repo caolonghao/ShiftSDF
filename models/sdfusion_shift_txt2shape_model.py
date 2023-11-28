@@ -104,6 +104,8 @@ class SDFusionShiftText2ShapeModel(BaseModel):
         # init shifted_settings
         self.shift_predictor = UNetShiftPredictor(shift_predictor_params)
         self.shift_predictor.to(self.device)
+        for param in self.shift_predictor.parameters():
+            param.requires_grad = True
         
         ######## END: Define Networks ########
 
