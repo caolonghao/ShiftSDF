@@ -348,13 +348,11 @@ class SDFusionShiftText2ShapeModel(BaseModel):
             extract_into_tensor(self.shift, t, shape) * u
         )
     
-    def shift_p_sample(self, x_t, s_t, s_t_minus_one, t, predicted_noise):
-        shape = x_t.shape
-        predicted_mean = \
-            extract_into_tensor(self.noise_posterior_mean_x_t_coef, t, shape) * x_t - \
-            extract_into_tensor(self.noise_posterior_mean_noise_coef, t, shape) * predicted_noise - \
-            extract_into_tensor(self.noise_posterior_s_t_coef, t, shape) * s_t + \
-            s_t_minus_one
+    def shift_p_sample(self, x_start, shift_x_t, t, s_t_minus_one):
+        shape = x_start.shape
+        predicted_mean = extract_into_tensor(self.posterior_mean_coef1, t, shape) * x_start + \
+                            extract_into_tensor(self.posterior_mean_coef2, t, shape) * shift_x_t + \
+                            s_t_minus_one
         
         log_variance_clipped = extract_into_tensor(self.posterior_log_variance_clipped, t, shape)
         noise = torch.randn(shape, device=self.device)
@@ -403,6 +401,9 @@ class SDFusionShiftText2ShapeModel(BaseModel):
     def p_losses(self, x_start, cond, t, noise=None):
         shape = x_start.shape
         noise = default(noise, lambda: torch.randn_like(x_start))
+        
+        # import pdb
+        # pdb.set_trace()
         
         none_x = torch.randn_like(x_start, device=self.device)
         u = self.shift_predictor(x_start, t, cond)
@@ -506,7 +507,8 @@ class SDFusionShiftText2ShapeModel(BaseModel):
             else:
                 s_t_minus_one = torch.zeros_like(img, device=self.device)
             
-            img = self.shift_p_sample(predicted_x_start, s_t, s_t_minus_one, t, predicted_noise)
+            shift_x_t = img - s_t
+            img = self.shift_p_sample(predicted_x_start, shift_x_t, t, s_t_minus_one)
         
         return img
 
