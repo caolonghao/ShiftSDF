@@ -45,3 +45,25 @@ class MPNetTextEncoder(nn.Module):
         text_features = self.model.encode(x)
         
         return torch.tensor(text_features, device=self.device)
+    
+class PretrainedBERTTextEncoder(nn.Module):
+    def __init__(self, 
+                 model_name='bert-large-uncased',
+                 device='cuda' if torch.cuda.is_available() else 'cpu',
+                 max_length = 77,
+                 ):
+        super().__init__()
+        from transformers import BertModel, BertTokenizerFast
+        
+        self.model = BertModel.from_pretrained(model_name).to(device)
+        self.tokenizer = BertTokenizerFast.from_pretrained(model_name)
+        self.device = device
+        self.max_length = max_length
+        
+    def forward(self, x):
+        tokenized_text = self.tokenizer(x, truncation=True, padding=True, return_tensors="pt", 
+                                        max_length=self.max_length)
+        tokenized_text.to(self.device)
+        text_features = self.model(**tokenized_text)[-2]
+        
+        return text_features

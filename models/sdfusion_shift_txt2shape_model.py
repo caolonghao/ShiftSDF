@@ -28,7 +28,7 @@ from models.networks.diffusion_networks.network import DiffusionUNet
 from models.networks.bert_networks.network import BERTTextEncoder
 from models.model_utils import load_vqvae
 from models.shift_predictor import TextShiftPredictor, UNetShiftPredictor, CrossAttentionShiftPredictor
-from models.networks.shift_text_networks.network import CLIPTextEncoder, MPNetTextEncoder
+from models.networks.shift_text_networks.network import CLIPTextEncoder, MPNetTextEncoder, PretrainedBERTTextEncoder
 
 # ldm util
 from models.networks.diffusion_networks.ldm_diffusion_util import (
@@ -96,10 +96,10 @@ class SDFusionShiftText2ShapeModel(BaseModel):
         for param in self.cond_model.parameters():
             param.requires_grad = True
         
-        # Freeze Open-CLIP Text Encoder
-        # self.shift_cond_model = MPNetTextEncoder()
-        # for param in self.cond_model.parameters():
-        #     param.requires_grad = True
+        # Freeze BERT Text Encoder
+        self.shift_text_encoder = PretrainedBERTTextEncoder(device=self.device)
+        for param in self.cond_model.parameters():
+            param.requires_grad = False
         
         # init shifted_settings
         self.shift_predictor = CrossAttentionShiftPredictor(shift_predictor_params)
@@ -405,8 +405,8 @@ class SDFusionShiftText2ShapeModel(BaseModel):
         # import pdb
         # pdb.set_trace()
         
-        none_x = torch.randn_like(x_start, device=self.device)
-        u = self.shift_predictor(x_start, t, cond)
+        shift_cond = self.shift_text_encoder(self.text)
+        u = self.shift_predictor(x_start, t, shift_cond)
         # shift_q_sample to get shifted x_noisy
         x_noisy = self.shift_q_sample(x_start=x_start, t=t, u=u, noise=noise)
         
@@ -470,7 +470,7 @@ class SDFusionShiftText2ShapeModel(BaseModel):
     def shift_sample(self, x_T, cond, uc=None, uc_scale=None):
         shape = x_T.shape
         
-        
+        shift_cond = self.shift_text_encoder(self.text)
         t = torch.full((shape[0],), self.num_timesteps-1, device=self.device, dtype=torch.long)
         img = x_T
         for i in tqdm(reversed(range(0, self.num_timesteps)), desc='sampling loop time step', total=self.num_timesteps):
@@ -494,16 +494,13 @@ class SDFusionShiftText2ShapeModel(BaseModel):
             unshifted_noise = self.predict_noise_from_start(img, t, predicted_x_start)
             # unshifted_noise.clamp_(min=-1., max=1.)
             
-            u_t = self.shift_predictor(predicted_x_start, t, cond).to(self.device)
+            u_t = self.shift_predictor(predicted_x_start, t, shift_cond).to(self.device)
             s_t = extract_into_tensor(self.shift, t, shape) * u_t
-            
-            tmp = s_t / extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, shape)
-            predicted_noise = unshifted_noise - tmp
             
             # import pdb
             # pdb.set_trace()
             if i > 0:
-                s_t_minus_one = extract_into_tensor(self.shift, t-1, shape) * self.shift_predictor(predicted_x_start, t-1, cond).to(self.device)
+                s_t_minus_one = extract_into_tensor(self.shift, t-1, shape) * self.shift_predictor(predicted_x_start, t-1, shift_cond).to(self.device)
             else:
                 s_t_minus_one = torch.zeros_like(img, device=self.device)
             

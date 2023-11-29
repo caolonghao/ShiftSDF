@@ -12,7 +12,7 @@ shift_predictor:
     image_size: 16
     dim_head: 64
     heads: 8
-    context_dim: 1280
+    context_dim: 1024
 
 bert:
   params:
