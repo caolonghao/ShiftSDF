@@ -489,8 +489,9 @@ class SDFusionShiftText2ShapeModel(BaseModel):
                 e_t_uncond, e_t = self.apply_model(x_in, t_in, c_in).chunk(2)
                 predicted_x_start = e_t_uncond + uc_scale * (e_t - e_t_uncond)
             
+            predicted_x_start.clamp_(min=-1., max=1.)
             unshifted_noise = self.predict_noise_from_start(img, t, predicted_x_start)
-            unshifted_noise.clamp_(min=-1., max=1.)
+            # unshifted_noise.clamp_(min=-1., max=1.)
             
             u_t = self.shift_predictor(predicted_x_start, t, cond).to(self.device)
             s_t = extract_into_tensor(self.shift, t, shape) * u_t
