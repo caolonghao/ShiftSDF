@@ -27,7 +27,7 @@ from models.networks.vqvae_networks.network import VQVAE
 from models.networks.diffusion_networks.network import DiffusionUNet
 from models.networks.bert_networks.network import BERTTextEncoder
 from models.model_utils import load_vqvae
-from models.shift_predictor import TextShiftPredictor, UNetShiftPredictor
+from models.shift_predictor import TextShiftPredictor, UNetShiftPredictor, CrossAttentionShiftPredictor
 from models.networks.shift_text_networks.network import CLIPTextEncoder, MPNetTextEncoder
 
 # ldm util
@@ -75,7 +75,7 @@ class SDFusionShiftText2ShapeModel(BaseModel):
         unet_params = df_conf.unet.params
         shift_predictor_params = df_conf.shift_predictor.params
         
-        self.df = DiffusionUNet(unet_params, vq_conf=vq_conf)
+        self.df = DiffusionUNet(unet_params, vq_conf=vq_conf, conditioning_key=df_model_params.conditioning_key)
         self.df.to(self.device)
 
         self.shift_type = opt.shift_type
@@ -102,7 +102,7 @@ class SDFusionShiftText2ShapeModel(BaseModel):
         #     param.requires_grad = True
         
         # init shifted_settings
-        self.shift_predictor = UNetShiftPredictor(shift_predictor_params)
+        self.shift_predictor = CrossAttentionShiftPredictor(shift_predictor_params)
         self.shift_predictor.to(self.device)
         for param in self.shift_predictor.parameters():
             param.requires_grad = True
@@ -185,7 +185,7 @@ class SDFusionShiftText2ShapeModel(BaseModel):
         df_model_params = df_conf.model.params
         
         # ref: ddpm.py, line 44 in __init__()
-        self.parameterization = "x0"
+        self.parameterization = "eps"
         self.learn_logvar = False
         
         self.v_posterior = 0.
@@ -247,6 +247,7 @@ class SDFusionShiftText2ShapeModel(BaseModel):
         
         self.noise_posterior_mean_x_t_coef = to_torch(np.sqrt(1. / alphas)).to(self.device)
         self.noise_posterior_mean_noise_coef = to_torch(betas/(np.sqrt(alphas)*np.sqrt(1. - alphas_cumprod))).to(self.device)
+        self.noise_posterior_s_t_coef = to_torch(np.sqrt(1. / alphas)).to(self.device)
         
         #---------------init shift settings params ----------------#
         if self.shift_type is not None:
@@ -293,6 +294,12 @@ class SDFusionShiftText2ShapeModel(BaseModel):
         assert not torch.isnan(self.lvlb_weights).all()
         ############################ END: init diffusion params ############################
 
+    def predict_start_from_noise(self, x_t, t, noise):
+        return (
+            extract_into_tensor(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t -
+            extract_into_tensor(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape) * noise
+        )
+    
     def set_input(self, input=None, max_sample=None):
         
         self.x = input['sdf']
@@ -335,11 +342,13 @@ class SDFusionShiftText2ShapeModel(BaseModel):
             extract_into_tensor(self.shift, t, shape) * u
         )
     
-    def shift_p_sample(self, x_start, shift_x_t, t, s_t_minus_one):
-        shape = x_start.shape
-        predicted_mean = extract_into_tensor(self.posterior_mean_coef1, t, shape) * x_start + \
-                            extract_into_tensor(self.posterior_mean_coef2, t, shape) * shift_x_t + \
-                            s_t_minus_one
+    def shift_p_sample(self, x_t, s_t, s_t_minus_one, t, predicted_noise):
+        shape = x_t.shape
+        predicted_mean = \
+            extract_into_tensor(self.noise_posterior_mean_x_t_coef, t, shape) * x_t - \
+            extract_into_tensor(self.noise_posterior_mean_noise_coef, t, shape) * predicted_noise - \
+            extract_into_tensor(self.noise_posterior_s_t_coef, t, shape) * s_t + \
+            s_t_minus_one
         
         log_variance_clipped = extract_into_tensor(self.posterior_log_variance_clipped, t, shape)
         noise = torch.randn(shape, device=self.device)
@@ -395,9 +404,8 @@ class SDFusionShiftText2ShapeModel(BaseModel):
         x_noisy = self.shift_q_sample(x_start=x_start, t=t, u=u, noise=noise)
         
         # predict noise (eps) or x0
-        # none_cond = None
-        # tmp = extract_into_tensor(self.shift, t, shape) * u / extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, shape)
-        predicted_result = self.apply_model(x_noisy, t, cond)
+        tmp = extract_into_tensor(self.shift, t, shape) * u / extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, shape)
+        predicted_result = self.apply_model(x_noisy, t, cond) - tmp
         
         loss_dict = {}
 
@@ -462,18 +470,27 @@ class SDFusionShiftText2ShapeModel(BaseModel):
             # print("image.shape: ", img.shape)
             t = torch.full((shape[0],), i, device=self.device, dtype=torch.long)
             
+            # import pdb
+            # pdb.set_trace()
+            
             if uc is None or uc_scale is None:
-                predicted_x_start = self.apply_model(img, t, cond)
+                unshift_noise = self.apply_model(img, t, cond)
             else:
                 x_in = torch.cat([img] * 2)
                 t_in = torch.cat([t] * 2)
                 c_in = torch.cat([uc, cond])
                 
                 e_t_uncond, e_t = self.apply_model(x_in, t_in, c_in).chunk(2)
-                predicted_x_start = e_t_uncond + uc_scale * (e_t - e_t_uncond)
+                unshift_noise = e_t_uncond + uc_scale * (e_t - e_t_uncond)
             
+            predicted_x_start = self.predict_start_from_noise(img, t, unshift_noise)
+            predicted_x_start.clamp_(min=-1., max=1.)
             
-            s_t = extract_into_tensor(self.shift, t, shape) * self.shift_predictor(predicted_x_start, t, cond).to(self.device)
+            u_t = self.shift_predictor(predicted_x_start, t, cond).to(self.device)
+            s_t = extract_into_tensor(self.shift, t, shape) * u_t
+            
+            tmp = s_t / extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, shape)
+            predicted_noise = unshift_noise - tmp
             
             # import pdb
             # pdb.set_trace()
@@ -482,8 +499,7 @@ class SDFusionShiftText2ShapeModel(BaseModel):
             else:
                 s_t_minus_one = torch.zeros_like(img, device=self.device)
             
-            shift_x_t = img - s_t
-            img = self.shift_p_sample(predicted_x_start, shift_x_t, t, s_t_minus_one)
+            img = self.shift_p_sample(predicted_x_start, s_t, s_t_minus_one, t, predicted_noise)
         
         return img
 
