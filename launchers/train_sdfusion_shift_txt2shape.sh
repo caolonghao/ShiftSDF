@@ -5,7 +5,7 @@ DATE_WITH_TIME=`date "+%Y-%m-%dT%H-%M-%S"`
 logs_dir="/data/logs_home"
 
 ### set gpus ###
-gpu_ids=0          # single-gpu
+gpu_ids=1          # single-gpu
 # gpu_ids=0,1,2,3  # multi-gpu
 
 if [ ${#gpu_ids} -gt 1 ]; then
@@ -21,7 +21,7 @@ fi
 ### hyper params ###
 backend='nccl'
 lr=1e-5
-batch_size=3
+batch_size=6
 ####################
 
 ### model stuff ###
@@ -61,7 +61,7 @@ name="${DATE_WITH_TIME}-${model}-${dataset_mode}-${cat}-LR${lr}-${note}"
 
 # ckpt="/home/tonycao/mycode/diffusion_model/SDFusion/logs_home/df_steps-latest.pth"
 
-debug=1
+debug=0
 if [ $debug = 1 ]; then
     printf "${RED}Debugging!${NC}\n"
 	# batch_size=20
