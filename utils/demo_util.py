@@ -161,7 +161,7 @@ class ShiftText2ShapeOpt(BaseOpt):
             df_cfg_path='configs/sdfusion-txt2shape.yaml',
             vq_cfg_path='configs/vqvae_snet.yaml',
         ):
-        self.model = 'sdfusion-txt2shape'
+        self.model = 'sdfusion-shift-txt2shape'
         self.df_cfg = df_cfg_path
         self.ckpt = ckpt_path
         
