@@ -469,7 +469,7 @@ class SDFusionShiftText2ShapeModel(BaseModel):
             # print("image.shape: ", img.shape)
             t = torch.full((shape[0],), i, device=self.device, dtype=torch.long)
             
-            if uc is None or uc_scale == 0:
+            if uc is None or uc_scale == None:
                 unshift_noise = self.apply_model(img, t, cond)
             
             else:
