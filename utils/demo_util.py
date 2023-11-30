@@ -138,6 +138,42 @@ class SDFusionText2ShapeOpt(BaseOpt):
     def name(self):
         return 'SDFusionText2ShapeOption'
 
+class ShiftText2ShapeOpt(BaseOpt):
+    def __init__(self, gpu_ids=0, seed=None):
+        super().__init__(gpu_ids, seed=seed)
+
+        # some other custom args here
+        print(f'[*] {self.name()} initialized.')
+        
+    def init_dset_args(self, dataroot='data', dataset_mode='text2shape', cat='all', res=64, cached_dir=None):
+        # dataset - snet
+        self.dataroot = dataroot
+        self.cached_dir = cached_dir
+        self.ratio = 1.0
+        self.res = res
+        self.dataset_mode = dataset_mode
+        self.cat = cat
+        
+    def init_model_args(
+            self,
+            ckpt_path='saved_ckpt/sdfusion-txt2shape.pth',
+            vq_ckpt_path='saved_ckpt/vqvae-snet-all.pth',
+            df_cfg_path='configs/sdfusion-txt2shape.yaml',
+            vq_cfg_path='configs/vqvae_snet.yaml',
+        ):
+        self.model = 'sdfusion-txt2shape'
+        self.df_cfg = df_cfg_path
+        self.ckpt = ckpt_path
+        
+        self.vq_model = 'vqvae'
+        self.vq_cfg = vq_cfg_path
+        self.vq_ckpt = vq_ckpt_path
+        self.vq_dset = 'snet'
+        self.vq_cat = 'all'
+
+    def name(self):
+        return 'ShiftText2ShapeOption'
+    
 class SDFusionImage2ShapeOpt(BaseOpt):
     def __init__(self, gpu_ids=0, seed=None):
         super().__init__(gpu_ids, seed=seed)
