@@ -170,7 +170,7 @@ if __name__ == '__main__':
         sample_text = remove_invalid_tokens(sample_text)
         
         words = sample_text.split()
-        if len(words) > 77:
+        if len(words) > 70:
             continue
         
         sdf_gen = SDFusion.txt2shape(input_txt=sample_text, ngen=ngen, ddim_steps=ddim_steps, ddim_eta=ddim_eta, uc_scale=uc_scale)
