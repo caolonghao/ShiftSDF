@@ -77,6 +77,28 @@ def log(t, eps: float = 1e-12):
 def l2norm(t):
     return F.normalize(t, dim = -1)
 
+def timestep_embedding(timesteps, dim, max_period=10000, repeat_only=False):
+    """
+    Create sinusoidal timestep embeddings.
+    :param timesteps: a 1-D Tensor of N indices, one per batch element.
+                      These may be fractional.
+    :param dim: the dimension of the output.
+    :param max_period: controls the minimum frequency of the embeddings.
+    :return: an [N x dim] Tensor of positional embeddings.
+    """
+    if not repeat_only:
+        half = dim // 2
+        freqs = torch.exp(
+            -math.log(max_period) * torch.arange(start=0, end=half, dtype=torch.float32) / half
+        ).to(device=timesteps.device)
+        args = timesteps[:, None].float() * freqs[None]
+        embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
+        if dim % 2:
+            embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
+    else:
+        embedding = repeat(timesteps, 'b -> b d', d=dim)
+    return embedding
+
 class Swish(nn.Module):
     def __init__(self):
         super().__init__()
@@ -139,13 +161,14 @@ class LayerNorm(nn.Module):
         return (x - mean) * (var + eps).rsqrt().type(dtype) * self.g.type(dtype)
 
 class CrossAttention(nn.Module):
-    def __init__(self, query_dim, context_dim=None, heads=8, dim_head=64, dropout=0.):
+    def __init__(self, query_dim, context_dim=None, heads=8, dim_head=64, dropout=0., use_timestep=False):
         super().__init__()
         inner_dim = dim_head * heads
         context_dim = default(context_dim, query_dim)
 
         self.scale = dim_head ** -0.5
         self.heads = heads
+        self.dim_head = dim_head
 
         self.to_q = nn.Linear(query_dim, inner_dim, bias=False)
         self.to_k = nn.Linear(context_dim, inner_dim, bias=False)
@@ -155,10 +178,21 @@ class CrossAttention(nn.Module):
             nn.Linear(inner_dim, query_dim),
             nn.Dropout(dropout)
         )
+        
+        self.use_timestep = use_timestep
 
-    def forward(self, x, context=None, mask=None):
+        if self.use_timestep:
+            time_embed_dim = 4 * dim_head
+            self.time_emb_proj = nn.Sequential(
+                nn.Linear(dim_head, time_embed_dim),
+                nn.SiLU(),
+                nn.Linear(time_embed_dim, 3 * inner_dim),
+            )
+
+    def forward(self, x, context=None, t=None, mask=None):
         h = self.heads
-
+        
+        bs, c = x.shape[:2]
         # if context is not None:
         #     if torch.isnan(context).any():
         #         import pdb; pdb.set_trace()
@@ -200,7 +234,15 @@ class CrossAttention(nn.Module):
 
         out = einsum('b i j, b j d -> b i d', attn, v)
         out = rearrange(out, '(b h) n d -> b n (h d)', h=h)
+        
+        if self.use_timestep:
+            time_step = timestep_embedding(t, self.dim_head, repeat_only=False)
+            time_emb = self.time_emb_proj(time_step).reshape(bs, c, -1)
+            out = out + time_emb
+        
         return self.to_out(out)
+
+
 
 class CrossAttentionShiftPredictor(nn.Module):
     def __init__(self, config, *args, **kwargs) -> None:
@@ -212,18 +254,19 @@ class CrossAttentionShiftPredictor(nn.Module):
         self.dim_head = config["dim_head"]
         self.heads = config["heads"]
         self.context_dim = config["context_dim"]
-        
+        self.use_timestep = config["use_timestep"]
         
         self.cross_attn = CrossAttention(self.input_dim, context_dim=self.context_dim, heads=self.heads,
-                                         dim_head=self.dim_head)
-        
+                                         dim_head=self.dim_head, use_timestep=self.use_timestep)
+    
+
     def forward(self, x, t=None, context=None):
         B, C = x.shape[:2]
         x = x.reshape(B, C, -1).contiguous()
         context_channel = context.shape[1]
         context = context.reshape(B, context_channel, -1).contiguous()
         
-        output = self.cross_attn(x, context)
+        output = self.cross_attn(x, context=context, t=t)
         output = output.reshape(-1, self.image_channel, self.image_size, self.image_size, self.image_size)
         return output
         
