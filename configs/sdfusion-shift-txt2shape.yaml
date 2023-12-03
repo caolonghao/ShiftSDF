@@ -10,9 +10,9 @@ shift_predictor:
   params:
     image_channel: 3
     image_size: 16
-    dim_head: 64
+    dim_head: 128
     heads: 8
-    context_dim: 768
+    context_dim: 1024
 
 bert:
   params:
