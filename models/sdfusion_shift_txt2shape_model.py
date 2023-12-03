@@ -28,7 +28,7 @@ from models.networks.diffusion_networks.network import DiffusionUNet
 from models.networks.bert_networks.network import BERTTextEncoder
 from models.model_utils import load_vqvae
 from models.shift_predictor import TextShiftPredictor, UNetShiftPredictor, CrossAttentionShiftPredictor
-from models.networks.shift_text_networks.network import CLIPTextEncoder, MPNetTextEncoder, PretrainedBERTTextEncoder
+from models.networks.shift_text_networks.network import FrozenOpenCLIPEmbedder
 
 # ldm util
 from models.networks.diffusion_networks.ldm_diffusion_util import (
@@ -97,7 +97,7 @@ class SDFusionShiftText2ShapeModel(BaseModel):
             param.requires_grad = True
         
         # Freeze BERT Text Encoder
-        self.shift_text_encoder = PretrainedBERTTextEncoder(device=self.device)
+        self.shift_text_encoder = FrozenOpenCLIPEmbedder(device=self.device)
         for param in self.cond_model.parameters():
             param.requires_grad = False
         
