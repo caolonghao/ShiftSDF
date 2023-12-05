@@ -48,7 +48,7 @@ class MPNetTextEncoder(nn.Module):
     
 class PretrainedBERTTextEncoder(nn.Module):
     def __init__(self, 
-                 model_name='bert-large-uncased',
+                 model_name='/data/0shared/yangling/caolonghao/bert-large',
                  device='cuda' if torch.cuda.is_available() else 'cpu',
                  max_length = 77,
                  ):

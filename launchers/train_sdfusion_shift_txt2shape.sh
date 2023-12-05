@@ -2,11 +2,11 @@ RED="\033[0;31m"
 NC="\033[0m" # No Color
 DATE_WITH_TIME=`date "+%Y-%m-%dT%H-%M-%S"`
 
-logs_dir="/data/logs_home"
+logs_dir="./logs_home"
 
 ### set gpus ###
-gpu_ids=1          # single-gpu
-# gpu_ids=0,1,2,3  # multi-gpu
+gpu_ids=3          # single-gpu
+# gpu_ids=1,2  # multi-gpu
 
 if [ ${#gpu_ids} -gt 1 ]; then
     # specify these two if multi-gpu
@@ -21,7 +21,7 @@ fi
 ### hyper params ###
 backend='nccl'
 lr=1e-5
-batch_size=6
+batch_size=8
 ####################
 
 ### model stuff ###
