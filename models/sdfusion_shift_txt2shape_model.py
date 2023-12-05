@@ -761,6 +761,7 @@ class SDFusionShiftText2ShapeModel(BaseModel):
             'vqvae': self.vqvae_module.state_dict(),
             'cond_model': self.cond_model_module.state_dict(),
             'df': self.df_module.state_dict(),
+            'shift_predictor': self.shift_predictor.state_dict(),
             'global_step': global_step,
         }
         
@@ -782,6 +783,7 @@ class SDFusionShiftText2ShapeModel(BaseModel):
         self.vqvae.load_state_dict(state_dict['vqvae'])
         self.df.load_state_dict(state_dict['df'])
         self.cond_model.load_state_dict(state_dict['cond_model'])
+        self.shift_predictor.load_state_dict(state_dict['shift_predictor'])
         print(colored('[*] weight successfully load from: %s' % ckpt, 'blue'))
 
         if load_opt:
